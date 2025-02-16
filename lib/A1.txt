@@ -1,0 +1,3 @@
+var A
+var B
+|- !A -> (!B -> !A) [axiom]
