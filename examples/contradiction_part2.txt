@@ -1,0 +1,17 @@
+name contradiction_part2
+
+import contradiction_part1
+
+var B
+var A
+
+assume !A -> B ==> a
+assume !A -> !B ==> b
+
+|- ((!A -> B) -> ((!A -> !B) -> (!A -> !(B -> B)))) [apply contradiction_part1(A, B)] ==> c
+|- (!A -> !B) -> (!A -> !(B -> B)) [modus_ponens c a] ==> d
+|- !A -> !(B -> B) [modus_ponens d b] ==> f2
+|- (!A->!(B->B)) -> ((B->B)->A) [apply A3(A, B->B)] ==> f3
+|- (B->B)->A [modus_ponens f3 f2] ==> f4
+|- B->B [apply self_implication(B)] ==> f5
+|- A [modus_ponens f5 f4] ==> f6

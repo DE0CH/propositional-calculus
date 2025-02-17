@@ -1,0 +1,16 @@
+name contradiction_part1
+
+import a_not_everything
+
+var A
+var B
+
+assume !B -> A ==> a
+assume !B -> !A ==> b
+assume !B ==> c
+
+|- A [modus_ponens a c] ==> d
+|- !A [modus_ponens a d] ==> f1
+|- !A -> A -> !(A->A) [apply a_not_everything(A, !(A -> A))] ==> f2
+|- A -> !(A->A) [modus_ponens f2 f1] ==> f3
+|- !(A->A) [modus_ponens f3 d] ==> f5

@@ -1,4 +1,0 @@
-name A1
-var A
-var B
-|- !A -> (!B -> !A) [axiom]

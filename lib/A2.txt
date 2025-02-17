@@ -1,5 +1,0 @@
-name A2
-var A
-var B
-var C
-|- (A -> (B -> C)) -> ((A -> B) -> (A -> C)) [axiom]
