@@ -56,7 +56,13 @@ class Deduction:
     name: Optional[str] = None
 
 def remove_duplicate_lines(deduction: Deduction) -> Deduction:
-    #TODO
+    new_lines = []
+    seen = set()
+    for line in deduction.lines:
+        if id(line.formula) not in seen:
+            seen.add(id(line.formula))
+            new_lines.append(line)
+    deduction.lines = new_lines
     return deduction
 
 def find_modus_ponens(line: Line[ModusPonens], lines: List[Line]) -> Tuple[Line, Line, int]:
@@ -190,10 +196,7 @@ def theorem_printer(theorem: Theorem, variables: Dict[str, Formula]):
         if isinstance(line.reason, ApplyTheorem):
             parameter_names = []
             for parameter in line.reason.parameters:
-                if id(parameter) in lookup_table:
-                    parameter_names.append(lookup_table[id(parameter)])
-                else:
-                    parameter_names.append(print_formula(parameter, lookup_table))
+                parameter_names.append(print_formula_no_sub(parameter, lookup_table))
             theorem_name = line.reason.theorem.name
             yield f"|- {formula_str} [apply {theorem_name}({', '.join(parameter_names)})] ==> {formula_name}"
         elif isinstance(line.reason, ModusPonens):
@@ -223,9 +226,10 @@ def deduction_theorem_algorithm_step(deduction: Deduction, self_implication: The
         AC = AC_theorem.lines[-1]
         ACB_theorem = deduction_theorem_algorithm(Deduction(deduction.atoms, deduction.assumptions, deduction.lines[:line_no] + [CB]), self_implication, A1, A2)
         ACB = ACB_theorem.lines[-1]
-        line1 = Line(parse_formula('(ACB) -> ((AC) -> (A -> B))', {'ACB': ACB.formula, 'A': A, 'B': B.formula, 'AC': AC.formula}), ApplyTheorem(A2, (A, C.formula, B.formula)))
-        line2 = Line(parse_formula('(A -> C) -> (A -> B)', {'A': A, 'B': B.formula, 'C': C.formula}), ModusPonens(line1.formula, ACB.formula))
-        line3 = Line(parse_formula('A -> B', {'A': A, 'B': B.formula}), ModusPonens(line2.formula, AC.formula))
+        AB = parse_formula('A -> B', {'A': A, 'B': B.formula})
+        line1 = Line(parse_formula('(ACB) -> ((AC) -> (AB))', {'ACB': ACB.formula, 'AB': AB, 'AC': AC.formula}), ApplyTheorem(A2, (A, C.formula, B.formula)))
+        line2 = Line(parse_formula('(AC) -> (AB)', {'AB': AB, 'AC': AC.formula}), ModusPonens(line1.formula, ACB.formula))
+        line3 = Line(parse_formula('AB', {'AB': AB}), ModusPonens(line2.formula, AC.formula))
         return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines[:len(deduction.assumptions)-1] + deduction.lines[len(deduction.assumptions):-1] + AC_theorem.lines + ACB_theorem.lines + [line1, line2, line3])
 
     raise ValueError("Invalid deduction")
@@ -383,7 +387,7 @@ with open('lib/self-implication.txt', 'r', encoding='utf-8') as f:
     deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
 
-with open('lib/a-not-everything.txt', 'r', encoding='utf-8') as f:
+with open('lib/contradiction.txt', 'r', encoding='utf-8') as f:
     deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
     result = deduction_theorem_algorithm(deduction, theorems['self_implication'], theorems['A1'], theorems['A2'])
