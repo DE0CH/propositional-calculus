@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Generic, TypeVar, Tuple, Dict
+from typing import List, Union, Optional, Generic, TypeVar, Tuple, Dict, Iterator
 from enum import Enum, auto
 from dataclasses import dataclass
 import re
@@ -28,7 +28,7 @@ class Theorem:
 @dataclass
 class ApplyTheorem:
     theorem: Theorem
-    variables: Tuple[Formula, ...]
+    parameters: Tuple[Formula, ...]
 
 @dataclass
 class ModusPonens:
@@ -46,6 +46,7 @@ class Line(Generic[R]):
 
 
 axiom_assertion = Theorem([], [], name='axiom assertion') # special "theorem" that asserts an axiom is true
+assumption_assertion = Theorem([], [], name='assumption assertion') # special theorem so that I can add the assumptions to the list of lines, make applying modus ponens easier
 
 @dataclass
 class Deduction:
@@ -55,13 +56,8 @@ class Deduction:
     name: Optional[str] = None
 
 def remove_duplicate_lines(deduction: Deduction) -> Deduction:
-    lines = []
-    lines_set = set()
-    for line in deduction.lines:
-        if line.formula not in lines_set:
-            lines.append(line)
-            lines_set.add(line.formula)
-    return Deduction(deduction.atoms, deduction.assumptions, lines)
+    #TODO
+    return deduction
 
 def find_modus_ponens(line: Line[ModusPonens], lines: List[Line]) -> Tuple[Line, Line, int]:
     line1 = line.reason.line1
@@ -77,16 +73,20 @@ def find_modus_ponens(line: Line[ModusPonens], lines: List[Line]) -> Tuple[Line,
         raise ValueError("Invalid deduction")
     return lines[line1_no], lines[line2_no], max(line1_no, line2_no)
 
-
-def print_formula(formula: Formula) -> str:
+def print_formula_no_sub(formula: Formula, variable_lookup: Dict[int, str]) -> str:
     if isinstance(formula, Implication):
-        return f"({print_formula(formula.left)} -> {print_formula(formula.right)})"
+        return f"({print_formula(formula.left, variable_lookup)} -> {print_formula(formula.right, variable_lookup)})"
     if isinstance(formula, Atom):
-        return formula.name or 'anonymous'
+        return variable_lookup.get(id(formula), f'(name={Atom.name})')
     if isinstance(formula, Negation):
-        return f"!{print_formula(formula.statement)}"
+        return f"!{print_formula_no_sub(formula.statement, variable_lookup)}"
 
     raise ValueError("Invalid formula")
+
+def print_formula(formula: Formula, variables_lookup: Dict[int, str]) -> str:
+    if id(formula) in variables_lookup:
+        return variables_lookup[id(formula)]
+    return print_formula_no_sub(formula, variables_lookup)
 
 class Parser:
     def __init__(self, formula: str):
@@ -167,22 +167,58 @@ def parse_formula(formula: str, variables: Dict[str, Formula]) -> Formula:
         return formula
 
     return substitute(tree, variables)
-    
 
+def theorem_printer(theorem: Theorem, variables: Dict[str, Formula]):
+    counter = 1
+    lookup_table: Dict[int, str] = {}
+    for name, formula in variables.items():
+        lookup_table[id(formula)] = name
+    for line in theorem.lines:
+        formula_str = print_formula_no_sub(line.formula, lookup_table)
+        if isinstance(line.reason, ApplyTheorem):
+            parameter_names = []
+            for parameter in line.reason.parameters:
+                if id(parameter) in lookup_table:
+                    parameter_names.append(lookup_table[id(parameter)])
+                else:
+                    parameter_names.append(print_formula(parameter, lookup_table))
+            theorem_name = line.reason.theorem.name
+            if id(line.formula) in lookup_table:
+                formula_name = lookup_table[id(line.formula)]
+            else:
+                formula_name = f"t{counter}"
+                counter += 1
+                lookup_table[id(line.formula)] = formula_name
+            yield f"|- {formula_str} [apply {theorem_name}({', '.join(parameter_names)})] ==> {formula_name}"
+        elif isinstance(line.reason, ModusPonens):
+            line1 = line.reason.line1
+            line2 = line.reason.line2
+            try:
+                line1_name = lookup_table[id(line1)] # if it is not in the lookup table, something had gone wrong before
+            except KeyError:
+                line1_name = f'??? {print_formula(line1, lookup_table)}'
+            try:
+                line2_name = lookup_table[id(line2)]
+            except KeyError:
+                line2_name = f'??? {print_formula(line2, lookup_table)}'
+            yield f"|- {formula_str} [modus_ponens {line1_name} {line2_name}] ==> {formula_name}"
 
 def deduction_theorem_algorithm_step(deduction: Deduction, self_implication: Theorem, A1: Theorem, A2: Theorem) -> Deduction: # self_implication is the theorem that (q -> q)
     # TODO: make this more efficient
     A = deduction.assumptions[-1]
     B = deduction.lines[-1]
-    if type(B) == Line[ApplyTheorem]:
+    if A == B.formula:
+        new_line = Line(parse_formula('A -> A', {'A': A}), ApplyTheorem(self_implication, (A,)))
+        return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines[:len(deduction.assumptions)-1] + deduction.lines[len(deduction.assumptions):-1] + [new_line])
+
+    if isinstance(B.reason, ApplyTheorem):
         line1 = Line(parse_formula('B -> (A -> B)', {'A': A, 'B': B.formula}), ApplyTheorem(A1, (A, B.formula)))
         line2 = Line(parse_formula('A -> B', {'A': A, 'B': B.formula}), ModusPonens(line1.formula, B.formula))
-        return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines + [line1, line2])
-    if A == B:
-        new_line = Line(parse_formula('A -> A', {'A': A}), ApplyTheorem(self_implication, (A,)))
-        return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines + [new_line])
+        # since we did not use the assumption, we remove it from the list of Lines as well
+        return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines[:len(deduction.assumptions)-1] + deduction.lines[len(deduction.assumptions):] + [line1, line2])
     if isinstance(B.reason, ModusPonens):
-        C, CB, line_no = find_modus_ponens(B, deduction.lines)
+        CB, C, line_no = find_modus_ponens(B, deduction.lines)
+
         AC_theorem = deduction_theorem_algorithm(Deduction(deduction.atoms, deduction.assumptions, deduction.lines[:line_no] + [C]), self_implication, A1, A2)
         AC = AC_theorem.lines[-1]
         ACB_theorem = deduction_theorem_algorithm(Deduction(deduction.atoms, deduction.assumptions, deduction.lines[:line_no] + [CB]), self_implication, A1, A2)
@@ -190,7 +226,7 @@ def deduction_theorem_algorithm_step(deduction: Deduction, self_implication: The
         line1 = Line(parse_formula('(A -> CB) -> ((A -> C) -> (A -> B))', {'A': A, 'B': B.formula, 'C': C.formula, 'CB': CB.formula}), ApplyTheorem(A2, (A, C.formula, B.formula)))
         line2 = Line(parse_formula('(A -> C) -> (A -> B)', {'A': A, 'B': B.formula, 'C': C.formula}), ModusPonens(line1.formula, ACB.formula))
         line3 = Line(parse_formula('A -> B', {'A': A, 'B': B.formula}), ModusPonens(line2.formula, AC.formula))
-        return Deduction(deduction.atoms, deduction.assumptions[:-1], deduction.lines + AC_theorem.lines + ACB_theorem.lines + [line1, line2, line3])
+        return Deduction(deduction.atoms, deduction.assumptions[:-1], AC_theorem.lines + ACB_theorem.lines + [line1, line2, line3])
 
     raise ValueError("Invalid deduction")
 
@@ -273,7 +309,6 @@ def parse_assumption(line, variables):
 
 def parse_deduction_file(lines, theorems: Dict[str, Theorem]):
     variables: Dict[str, Atom] = {}
-    lines_ns: Dict[str, Line] = {}
     class Expected(Enum):
         NAME = auto()
         ATOMS = auto()
@@ -315,6 +350,7 @@ def parse_deduction_file(lines, theorems: Dict[str, Theorem]):
         elif expected == Expected.ASSUMPTION and line.startswith('assume'):
             assumption = parse_assumption(line, variables)
             deduction.assumptions.append(assumption)
+            deduction.lines.append(Line(assumption, ApplyTheorem(assumption_assertion, ())))
         elif expected == Expected.ASSUMPTION:
             raise ValueError(f"Expected assume or |-, got: {line}")
         elif expected == Expected.LINE and line.startswith('|-'):
@@ -324,33 +360,32 @@ def parse_deduction_file(lines, theorems: Dict[str, Theorem]):
             raise ValueError(f"Expected line starting with |-, got: {line}")
         else:
             raise ValueError(f"Invalid state: {expected}")
-    return deduction
+    return deduction, variables
 
 
 
 theorems: Dict[str, Theorem] = {}
 
 with open('lib/A1.txt', 'r', encoding='utf-8') as f:
-    deduction = parse_deduction_file(f, theorems)
+    deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
 
 with open('lib/A2.txt', 'r', encoding='utf-8') as f:
-    deduction = parse_deduction_file(f, theorems)
+    deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
 
 with open('lib/A3.txt', 'r', encoding='utf-8') as f:
-    deduction = parse_deduction_file(f, theorems)
+    deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
 
 
 with open('lib/self-implication.txt', 'r', encoding='utf-8') as f:
-    deduction = parse_deduction_file(f, theorems)
-    print(deduction.assumptions)
-    for line in deduction.lines:
-        print(print_formula(line.formula))
+    deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
 
 with open('lib/a-not-everything.txt', 'r', encoding='utf-8') as f:
-    deduction = parse_deduction_file(f, theorems)
+    deduction, variables = parse_deduction_file(f, theorems)
     theorems[deduction.name] = deduction
     result = deduction_theorem_algorithm(deduction, theorems['self_implication'], theorems['A1'], theorems['A2'])
+    for line in theorem_printer(result, variables):
+        print(line)
