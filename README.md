@@ -1,8 +1,8 @@
 # propositional-calculus
 
-Compile theorems into a full (most likely very tedious) proof from only axioms and existing theorems
+Compile theorems written with deduction into a full (most likely very tedious) proof from only axioms and existing theorems
 
-You write deduction in a file, making sure to quote the correct theorem and axioms. Currently A1, A2, A3, and self implication are built in, but you will need to supply the proof for other theorems. Then you can write out your proof in a proof file the following format
+You write deduction in a file, making sure to quote the correct theorem and axioms. Currently A1, A2, A3, and self implication are built in, and you will need to supply the proof for other theorems. Then you can write out your proof in a proof file in the following format
 
 ```
 name the_name_of_theorem

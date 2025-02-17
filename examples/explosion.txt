@@ -1,4 +1,4 @@
-name a_not_everything
+name explosion
 var A
 var B
 assume !A ==> a
