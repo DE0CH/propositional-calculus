@@ -1,8 +1,8 @@
-name a-not-everything
+name a_not_everything
 var A
 var B
 assume !A ==> a
 |- !A -> (!B -> !A) [apply A1(A, B)] ==> b
-|- !B -> !A [mp b a] ==> d
+|- !B -> !A [modus_ponens b a] ==> d
 |- (!B -> !A) -> (A -> B) [apply A3(B, A)] ==> c
-|- A -> B [mp c d]
+|- A -> B [modus_ponens c d]

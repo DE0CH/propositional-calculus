@@ -1,0 +1,7 @@
+name self_implication
+var P
+|- P -> ((P -> P) -> P)  [apply A1(P, (P -> P))] ==> a  
+|- ((P -> ((P -> P) -> P)) -> ((P -> (P -> P)) -> (P -> P)))  [apply A2(P, (P -> P), P)] ==> b  
+|- (P -> (P -> P)) -> (P -> P)  [modus_ponens b a] ==> c 
+|- P -> (P -> P)  [apply A1(P, P)] ==> d  
+|- P -> P  [modus_ponens c d]  
