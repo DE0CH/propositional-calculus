@@ -44,3 +44,5 @@ See the `examples` folder for some examples, e.g. `python3 main.py examples/cont
 - Multiple theorems in the same file
 - Comment in file
 - Check that all the variables are declared
+- Add more type hints (aim to pass `mypy --strict`)
+
